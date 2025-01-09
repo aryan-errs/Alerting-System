@@ -9,7 +9,6 @@ A robust Node.js/TypeScript service that monitors HTTP requests, tracks failed a
 - ⏰ Configurable alert thresholds and monitoring periods
 - 📧 Email notifications for security alerts using SMTP
 - 📈 Metrics endpoint for monitoring and analysis
-- 🚀 Scalable architecture supporting high-traffic environments
 - 🔒 IP-based tracking and rate limiting
 
 ## Prerequisites
@@ -22,17 +21,20 @@ A robust Node.js/TypeScript service that monitors HTTP requests, tracks failed a
 ## Installation
 
 1. Clone the repository:
+
 ```bash
 git clone <repository-url>
 cd alerting-system
 ```
 
 2. Install dependencies:
+
 ```bash
 npm install
 ```
 
 3. Create a `.env` file in the project root:
+
 ```env
 MONGODB_URI=mongodb://localhost:27017/request-monitor
 SMTP_USER=your-gmail@gmail.com
@@ -42,6 +44,7 @@ VALID_TOKEN=your-valid-token
 ```
 
 4. Build the project:
+
 ```bash
 npm run build
 ```
@@ -61,6 +64,7 @@ The system can be configured through environment variables and the `config.ts` f
 ## Usage
 
 1. Start the server:
+
 ```bash
 npm run dev    # Development mode
 npm start      # Production mode
@@ -69,6 +73,7 @@ npm start      # Production mode
 2. Test the endpoints:
 
 Valid request:
+
 ```bash
 curl -X POST http://localhost:3000/api/submit \
   -H "Authorization: Bearer your-valid-token" \
@@ -77,53 +82,41 @@ curl -X POST http://localhost:3000/api/submit \
 ```
 
 Check metrics:
+
 ```bash
 curl http://localhost:3000/api/metrics
 ```
 
-## Scaling
-
-The system can be scaled using various strategies:
-
-1. Process Management:
-```bash
-npm install pm2 -g
-pm2 start ecosystem.config.js
-```
-
-2. Redis Caching (optional):
-```bash
-npm install ioredis
-```
-
-3. Load Balancing:
-- Configure multiple instances using PM2
-- Use a reverse proxy like Nginx
-
 ## API Endpoints
 
 ### POST /api/submit
+
 Protected endpoint for testing the monitoring system.
 
 Headers:
+
 - `Authorization`: Bearer token
 - `Content-Type`: application/json
 
 ### GET /api/metrics
+
 Retrieve monitoring metrics and statistics.
 
 Query Parameters:
+
 - `startTime`: ISO date string
 - `endTime`: ISO date string
 
 ## Development
 
 1. Run in development mode:
+
 ```bash
 npm run dev
 ```
 
 2. Build the project:
+
 ```bash
 npm run build
 ```
@@ -131,11 +124,13 @@ npm run build
 ## Testing
 
 Run the test suite:
+
 ```bash
 npm test
 ```
 
 Manual testing script:
+
 ```bash
 # Test invalid requests
 for i in {1..5}; do 
