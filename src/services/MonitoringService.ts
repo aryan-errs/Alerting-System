@@ -1,10 +1,8 @@
-// src/services/MonitoringService.ts
 import nodemailer from 'nodemailer';
 import Redis from 'ioredis';
 import { config } from '../config';
 import { FailedRequest } from '../models/FailedRequest';
 
-// Define interfaces for better type safety
 interface FailedRequestData {
   ip: string;
   reason: string;
@@ -22,9 +20,10 @@ interface MetricsQuery {
 export class MonitoringService {
   private emailTransporter: nodemailer.Transporter;
   private redis: Redis;
+  private CACHE_TTL = 300; // 5 minutes cache TTL
+  private METRICS_CACHE_KEY = 'metrics_cache:';
 
   constructor() {
-    // Initialize Redis with error handling
     try {
       this.redis = new Redis({
         host: process.env.REDIS_HOST || 'localhost',
@@ -40,7 +39,6 @@ export class MonitoringService {
         console.error('Redis connection error:', error);
       });
 
-      // Initialize email transporter
       this.emailTransporter = nodemailer.createTransport(config.smtp);
     } catch (error) {
       console.error('Failed to initialize MonitoringService:', error);
@@ -48,9 +46,12 @@ export class MonitoringService {
     }
   }
 
+  private generateMetricsCacheKey(startTime?: Date, endTime?: Date): string {
+    return `${this.METRICS_CACHE_KEY}${startTime?.toISOString() || 'none'}_${endTime?.toISOString() || 'none'}`;
+  }
+
   async logFailedRequest(ip: string, reason: string, headers: any, endpoint: string): Promise<void> {
     try {
-      // Create failed request record
       const requestData: FailedRequestData = {
         ip,
         reason,
@@ -60,11 +61,15 @@ export class MonitoringService {
 
       await FailedRequest.create(requestData);
 
-      // Increment and check Redis counter
+      // Invalidate metrics cache when new data is added
+      const cacheKeys = await this.redis.keys(`${this.METRICS_CACHE_KEY}*`);
+      if (cacheKeys.length > 0) {
+        await this.redis.del(...cacheKeys);
+      }
+
       const key = `failed_${ip}`;
       const count = await this.redis.incr(key);
 
-      // Set expiration if this is the first failed attempt
       if (count === 1) {
         await this.redis.expire(key, config.monitoring.timeWindowMinutes * 60);
       }
@@ -76,6 +81,52 @@ export class MonitoringService {
     } catch (error: any) {
       console.error('Error logging failed request:', error);
       throw new Error(`Failed to log request: ${error.message}`);
+    }
+  }
+
+  async getMetrics(startTime?: Date, endTime?: Date) {
+    try {
+      const cacheKey = this.generateMetricsCacheKey(startTime, endTime);
+
+      // Try to get from cache first
+      const cachedMetrics = await this.redis.get(cacheKey);
+      if (cachedMetrics) {
+        console.log('Cache hit for metrics');
+        return JSON.parse(cachedMetrics);
+      }
+
+      console.log('Cache miss for metrics, fetching from database');
+      const query: MetricsQuery = {};
+
+      if (startTime || endTime) {
+        query.timestamp = {};
+        if (startTime) query.timestamp.$gte = startTime;
+        if (endTime) query.timestamp.$lte = endTime;
+      }
+
+      const metrics = await FailedRequest.aggregate([
+        { $match: query },
+        {
+          $group: {
+            _id: {
+              ip: '$ip',
+              reason: '$reason',
+            },
+            count: { $sum: 1 },
+            firstSeen: { $min: '$timestamp' },
+            lastSeen: { $max: '$timestamp' },
+          },
+        },
+        { $sort: { count: -1 } }
+      ]);
+
+      // Store in cache
+      await this.redis.setex(cacheKey, this.CACHE_TTL, JSON.stringify(metrics));
+      return metrics;
+
+    } catch (error: any) {
+      console.error('Error fetching metrics:', error);
+      throw new Error(`Failed to fetch metrics: ${error.message}`);
     }
   }
 
@@ -104,38 +155,6 @@ export class MonitoringService {
     }
   }
 
-  async getMetrics(startTime?: Date, endTime?: Date) {
-    try {
-      const query: MetricsQuery = {};
-
-      if (startTime || endTime) {
-        query.timestamp = {};
-        if (startTime) query.timestamp.$gte = startTime;
-        if (endTime) query.timestamp.$lte = endTime;
-      }
-
-      return await FailedRequest.aggregate([
-        { $match: query },
-        {
-          $group: {
-            _id: {
-              ip: '$ip',
-              reason: '$reason',
-            },
-            count: { $sum: 1 },
-            firstSeen: { $min: '$timestamp' },
-            lastSeen: { $max: '$timestamp' },
-          },
-        },
-        { $sort: { count: -1 } } // Sort by count in descending order
-      ]);
-    } catch (error: any) {
-      console.error('Error fetching metrics:', error);
-      throw new Error(`Failed to fetch metrics: ${error.message}`);
-    }
-  }
-
-  // Cleanup method for graceful shutdown
   async cleanup(): Promise<void> {
     try {
       await this.redis.quit();
