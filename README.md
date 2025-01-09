@@ -156,4 +156,4 @@ done
 └── package.json          # Dependencies
 ```
 
-![Email Alert](./assets/Email alert.png)
+![Email Alert](/assets/email-alert.png)
